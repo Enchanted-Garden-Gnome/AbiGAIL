@@ -11,7 +11,9 @@ from argparse import ArgumentParser
 import torch
 
 #taken from AIGym will need to change to adapt to rlgym
-env = 
+env = rlgym.make(
+    
+)
 action_dim = env.action_space.shape[0]
 state_dim = env.observation_space.shape[0]
 
@@ -63,7 +65,7 @@ for n_epi in range(args.epochs):
             
             action, log_prob = agent.get_action(torch.from_numpy(state).float().unsqueeze(0).to(device))
             
-            next_state_, r, done, info = env.step(action.cpu().numpy())
+            next_state_, _, done, info = env.step(action.cpu().numpy())
             next_state = np.clip((next_state_ - state_rms.mean) / (state_rms.var ** 0.5 + 1e-8), -5, 5)
             
             reward = discriminator.get_reward(torch.tensor(state).unsqueeze(0).float().to(device),action).item()
@@ -76,16 +78,10 @@ for n_epi in range(args.epochs):
                                          log_prob.detach().cpu().numpy()\
                                         )
             agent.put_data(transition) 
-            score += r
             discriminator_score += reward
             if done:
                 state_ = (env.reset())
                 state = np.clip((state_ - state_rms.mean) / (state_rms.var ** 0.5 + 1e-8), -5, 5)
-                score_lst.append(score)
-                if writer != None:
-                    writer.add_scalar("score/real", score, n_epi)
-                    writer.add_scalar("score/discriminator", discriminator_score, n_epi)
-                score = 0
                 discriminator_score = 0
             else:
                 state = next_state
@@ -93,8 +89,5 @@ for n_epi in range(args.epochs):
         agent.train(discriminator, discriminator_args.batch_size, state_rms, n_epi)
         state_rms.update(np.vstack(state_lst))
         state_lst = []
-        if n_epi%args.print_interval==0 and n_epi!=0:
-            print("# of episode :{}, avg score : {:.1f}".format(n_epi, sum(score_lst)/len(score_lst)))
-            score_lst = []
         if (n_epi % args.save_interval == 0 )& (n_epi != 0):
             torch.save(agent.state_dict(), './model_weights/model_'+str(n_epi))
